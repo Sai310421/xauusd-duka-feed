@@ -1,0 +1,10 @@
+{
+  "updated": "2026-08-28T21:35:34Z",
+  "window": { "start": "2025-09-01", "end": "2026-08-28" },
+  "policy": "cache-first, bulk-first, daily M1 only for gaps, max 16 files/run",
+  "m1_days_cached": 8,
+  "m1_days_wanted": 311,
+  "m1_this_run": 16,
+  "repo": "Sai310421/xauusd-duka-feed",
+  "note": "M1 stays on disk. App reads M5/M15/H1/H4/D1 only. Each run fills the next gaps."
+}

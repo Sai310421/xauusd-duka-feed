@@ -1,0 +1,45 @@
+name: duka-sync
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+  repository_dispatch:
+    types: [duka-sync]
+  push:
+    paths:
+      - ".github/workflows/duka-sync.yml"
+      - "scripts/duka_sync.py"
+
+permissions:
+  contents: write
+
+jobs:
+  fill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            nautilus/cache/duka
+            nautilus/cache/github
+          key: duka-${{ github.run_id }}
+          restore-keys: |
+            duka-
+      - name: Fill next M1 gaps
+        run: python3 -u scripts/duka_sync.py
+      - name: Commit books if coverage moved
+        run: |
+          git config user.name "duka-sync"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add books/
+          if git diff --staged --quiet; then
+            echo "no book changes"
+            exit 0
+          fi
+          DAYS=$(python3 -c "import json; print(json.load(open('books/duka-sync.json'))['m1_days_cached'])")
+          WANT=$(python3 -c "import json; print(json.load(open('books/duka-sync.json'))['m1_days_wanted'])")
+          git commit -m "feed: M1 ${DAYS}/${WANT}"
+          git push
