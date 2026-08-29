@@ -1,5 +1,5 @@
 {
-  "updated": "2026-08-29T01:29:11Z",
+  "updated": "2026-08-29T02:43:57Z",
   "window": {
     "start": "2025-09-01",
     "end": "2026-08-28"
@@ -23,17 +23,17 @@
       "bytes": 4319
     }
   },
-  "m1_days_cached": 40,
+  "m1_days_cached": 48,
   "m1_days_wanted": 311,
   "m1_this_run": 16,
   "books": {
     "M5": {
-      "n": 26401,
+      "n": 28057,
       "start": "2025-09-01T00:00:00Z",
       "end": "2026-05-26T00:00:00Z"
     },
     "M15": {
-      "n": 8801,
+      "n": 9353,
       "start": "2025-09-01T00:00:00Z",
       "end": "2026-05-26T00:00:00Z"
     },
@@ -53,7 +53,7 @@
       "end": "2026-07-31T00:00:00Z"
     }
   },
-  "mtf_bytes": 2893705,
+  "mtf_bytes": 3042837,
   "repo": "Sai310421/xauusd-duka-feed",
   "note": "M1 stays on disk. App reads M5/M15/H1/H4/D1 only. Each run fills the next gaps."
 }
