@@ -1,5 +1,5 @@
 {
-  "updated": "2026-08-29T23:31:57Z",
+  "updated": "2026-08-30T01:08:28Z",
   "window": {
     "start": "2025-09-01",
     "end": "2026-08-28"
@@ -23,7 +23,7 @@
       "bytes": 4319
     }
   },
-  "m1_days_cached": 216,
+  "m1_days_cached": 224,
   "m1_days_wanted": 311,
   "m1_this_run": 16,
   "books": {
@@ -53,7 +53,7 @@
       "end": "2026-07-31T00:00:00Z"
     }
   },
-  "mtf_bytes": 4962940,
+  "mtf_bytes": 4957946,
   "repo": "Sai310421/xauusd-duka-feed",
   "note": "M1 stays on disk. App reads M5/M15/H1/H4/D1 only. Each run fills the next gaps."
 }
