@@ -1,4 +1,4 @@
-name: duka-sync
+name: duka-sync\n# tickscalper rawtick v1 rerun
 
 on:
   schedule:
