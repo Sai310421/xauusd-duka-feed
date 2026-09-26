@@ -27,6 +27,8 @@ jobs:
         env:
           RAW_START: '2026-09-25'
           RAW_END: '2026-09-25'
+          RAW_HOUR_START: '7'
+          RAW_HOUR_END: '18'
         run: python3 -u scripts/tickscalper_rawtick_ab.py
 
       - name: Upload TickScalper Raw Tick result
