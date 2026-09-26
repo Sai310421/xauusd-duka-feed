@@ -123,7 +123,33 @@ def load_ticks(symbol):
     ticks.sort(key=lambda x:x[0])
     return ticks,str(zp),url
 
-def run(ticks):
+def normalize_ticks(ticks, mode):
+    if mode=="ALL": return ticks
+    out=[]; prev_bid=None; prev_ask=None
+    for x in ticks:
+        t,ask,bid=x
+        keep = (mode=="QUOTE_CHANGE" and (ask!=prev_ask or bid!=prev_bid)) or (mode=="BID_CHANGE" and bid!=prev_bid)
+        if keep: out.append(x)
+        prev_bid=bid; prev_ask=ask
+    return out
+
+def tick_diagnostics(ticks):
+    if not ticks: return {}
+    same_quote=same_bid=0; dts=[]
+    pb=pa=None; pt=None
+    for t,a,b in ticks:
+        if pb is not None:
+            if b==pb: same_bid+=1
+            if b==pb and a==pa: same_quote+=1
+            dts.append(t-pt)
+        pb=b; pa=a; pt=t
+    dts.sort()
+    q=lambda p: dts[min(len(dts)-1,int((len(dts)-1)*p))] if dts else 0
+    n=max(len(ticks)-1,1)
+    return {"same_bid_ratio":same_bid/n,"same_quote_ratio":same_quote/n,
+            "dt_ms_p10":q(.10),"dt_ms_p50":q(.50),"dt_ms_p90":q(.90)}
+
+def run(ticks, reverse=False):
     buf=TickBuf(BUFFER_N); signal=None; pos=None; trades=[]; last_entry=-10**18
     spread_rej=0
     for t,ask,bid in ticks:
@@ -164,10 +190,11 @@ def run(ticks):
         if not (FOLLOW_MIN_MS<=age<=FOLLOW_MAX_MS): continue
         d=signal["dir"]; mom=buf.momentum(MOM_N); c=buf.consecutive()
         if (mom*d)>0 and abs(mom)>=max(abs(signal["seed_mom"]),MOM_THR) and abs(c)>=3 and (1 if c>0 else -1)==d:
-            entry=ask if d==1 else bid
-            pos={"t":t,"dir":d,"entry":entry,"entry_mid":(ask+bid)/2,
-                 "sl":entry-SL if d==1 else entry+SL,
-                 "tp":entry+TP if d==1 else entry-TP,
+            trade_d=(-d if reverse else d)
+            entry=ask if trade_d==1 else bid
+            pos={"t":t,"dir":trade_d,"entry":entry,"entry_mid":(ask+bid)/2,
+                 "sl":entry-SL if trade_d==1 else entry+SL,
+                 "tp":entry+TP if trade_d==1 else entry-TP,
                  "spread":ask-bid}
             last_entry=t; signal=None
 
@@ -195,28 +222,34 @@ for symbol in VARIANTS:
     try:
         ticks,path,url=load_ticks(symbol)
         if not ticks: raise RuntimeError("no ticks in selected window")
-        trades,spread_rej=run(ticks)
         spreads=sorted(a-b for _,a,b in ticks)
         q=lambda p: spreads[min(len(spreads)-1,int((len(spreads)-1)*p))]
         z={"tick_count":len(ticks),"source_file":path,"source_url":url,
+           "diagnostics":tick_diagnostics(ticks),
            "spread":{"p10":q(.10),"p50":q(.50),"p90":q(.90),"p99":q(.99),
                      "mean":sum(spreads)/len(spreads)},
-           "spread_rejects":spread_rej,
-           "commission_scenarios":{}}
-        for c in COMMISSION_RT_SCENARIOS:
-            z["commission_scenarios"][f"{c:.3f}"]=metrics(trades,c)
-        if trades:
-            gross=[x["gross_mid"] for x in trades]
-            raw=[x["pnl_no_comm"] for x in trades]
-            z["gross_mid_EV"]=sum(gross)/len(gross)
-            z["bidask_EV_before_commission"]=sum(raw)/len(raw)
-            z["avg_spread_drag"]=sum(x["spread_drag"] for x in trades)/len(trades)
-            z["break_even_commission_rt"]=sum(raw)/len(raw)
-        else:
-            z["gross_mid_EV"]=z["bidask_EV_before_commission"]=z["avg_spread_drag"]=z["break_even_commission_rt"]=0
+           "modes":{}}
         fields=["entry_t","exit_t","dir","entry","exit","pnl_no_comm","gross_mid","spread_drag","hold_ms","reason","spread_entry"]
-        with (OUT/f"trades_{symbol}.csv").open("w",newline="") as f:
-            w=csv.DictWriter(f,fieldnames=fields); w.writeheader(); w.writerows(trades)
+        for mode in ("ALL","QUOTE_CHANGE","BID_CHANGE"):
+            nt=normalize_ticks(ticks,mode)
+            mz={"tick_count":len(nt),"diagnostics":tick_diagnostics(nt)}
+            for direction in ("FOLLOW","REVERSE"):
+                trades,spread_rej=run(nt,reverse=(direction=="REVERSE"))
+                dz={"spread_rejects":spread_rej,"commission_scenarios":{}}
+                for comm in COMMISSION_RT_SCENARIOS:
+                    dz["commission_scenarios"][f"{comm:.3f}"]=metrics(trades,comm)
+                if trades:
+                    gross=[x["gross_mid"] for x in trades]; raw=[x["pnl_no_comm"] for x in trades]
+                    dz["gross_mid_EV"]=sum(gross)/len(gross)
+                    dz["bidask_EV_before_commission"]=sum(raw)/len(raw)
+                    dz["avg_spread_drag"]=sum(x["spread_drag"] for x in trades)/len(trades)
+                    dz["break_even_commission_rt"]=sum(raw)/len(raw)
+                else:
+                    dz["gross_mid_EV"]=dz["bidask_EV_before_commission"]=dz["avg_spread_drag"]=dz["break_even_commission_rt"]=0
+                mz[direction]=dz
+                with (OUT/f"trades_{symbol}_{mode}_{direction}.csv").open("w",newline="") as f:
+                    w=csv.DictWriter(f,fieldnames=fields); w.writeheader(); w.writerows(trades)
+            z["modes"][mode]=mz
         summary["variants"][symbol]=z
     except Exception as e:
         summary["variants"][symbol]={"error":repr(e)}
