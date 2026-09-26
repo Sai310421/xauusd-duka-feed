@@ -477,10 +477,17 @@ def run_strict_execution(ticks, mode="MARKET", pullback=0.0, entry_spread_cap=MA
             continue
 
         age=t-signal["t"]
-        if age>1000:
+        if age>10000:
             signal=None
             continue
         if age<250:
+            continue
+        # D_F_STRICT keeps an unfilled seed locked through 10s;
+        # strict follow confirmation is only eligible through 1000ms.
+        if age>1000:
+            continue
+        if (ask-bid)>MAX_SPREAD:
+            spread_rej+=1
             continue
 
         direction=signal["dir"]
@@ -594,11 +601,14 @@ dconfigs=[
     ("D_F_WIDE","FOLLOW",100,1500,0.75,2),
     ("D_H_MID","HYBRID",150,1250,0.90,2),
 ]
+strict_baseline_trades=None
 for v,mode,fmin,fmax,ratio,consec_n in dconfigs:
     tr,rej=run_direction_state_machine(
         ticks,mode=mode,follow_min_ms=fmin,follow_max_ms=fmax,
         follow_ratio=ratio,follow_consec=consec_n
     )
+    if v=="D_F_STRICT":
+        strict_baseline_trades=[dict(x) for x in tr]
     summary["variants"][v]={"direction_state_machine":mode,
                             "follow_min_ms":fmin,"follow_max_ms":fmax,
                             "follow_ratio":ratio,"follow_consec":consec_n,
@@ -628,6 +638,24 @@ for v,mode,pb,scap,pms in exec_configs:
     with (OUT/f"trades_{v}.csv").open("w",newline="") as f:
         w=csv.DictWriter(f,fieldnames=fields)
         w.writeheader(); w.writerows(tr)
+
+# Parity gate: E_MKT must reproduce the frozen D_F_STRICT signal path.
+e_mkt_path=OUT/"trades_E_MKT.csv"
+if strict_baseline_trades is None:
+    raise RuntimeError("D_F_STRICT baseline missing")
+with e_mkt_path.open() as f:
+    e_mkt_rows=list(csv.DictReader(f))
+parity_ok=(len(e_mkt_rows)==len(strict_baseline_trades))
+if parity_ok:
+    for a,b in zip(e_mkt_rows,strict_baseline_trades):
+        if int(a["entry_t"])!=int(b["entry_t"]) or int(a["dir"])!=int(b["dir"]):
+            parity_ok=False
+            break
+summary["execution_parity"]={"E_MKT_vs_D_F_STRICT":parity_ok,
+                             "E_MKT_N":len(e_mkt_rows),
+                             "D_F_STRICT_N":len(strict_baseline_trades)}
+if not parity_ok:
+    raise RuntimeError("Execution parity failed: E_MKT != D_F_STRICT")
 
 summary["warnings"]=[
  "Raw Dukascopy Bid/Ask tick replay, but not a broker-specific Exness fill model.",
