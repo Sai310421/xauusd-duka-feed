@@ -266,6 +266,121 @@ def run_variant(ticks,atrmap,variant,reverse=False,max_hold_ms=MAX_HOLD_MS):
                        "spread_entry":pos["spread"]})
     return trades,{"spread_rejects":spread_rej,"velocity_rejects":vel_rej,"persistence_rejects":persist_rej}
 
+
+def run_direction_state_machine(ticks, mode="HYBRID"):
+    """Derived timing hypothesis:
+    seed momentum -> 0.25-1.0s follow if acceleration persists;
+    1-3s dead zone; 3-10s reverse only after opposite micro-tick confirmation.
+    """
+    buf=TickBuf(BUFFER_N)
+    pos=None; pending=None; trades=[]
+    last_entry=-10**18
+    spread_rej=follow_rej=reverse_rej=expired=0
+
+    def open_pos(t,ask,bid,trade_dir,spread,phase):
+        if trade_dir==1:
+            entry=ask; sl=entry-SL; tp=entry+TP
+        else:
+            entry=bid; sl=entry+SL; tp=entry-TP
+        max_hold = 2000 if phase=="FOLLOW" else 10000
+        return {"t":t,"dir":trade_dir,"entry":entry,"sl":sl,"tp":tp,
+                "spread":spread,"phase":phase,"max_hold":max_hold}
+
+    for t,ask,bid,av,bv in ticks:
+        buf.push(bid)
+
+        if pos:
+            hold=t-pos["t"]
+            if pos["dir"]==1:
+                exec_px=bid; pnl=exec_px-pos["entry"]
+                reason = "SL" if exec_px<=pos["sl"] else ("TP" if exec_px>=pos["tp"] else None)
+            else:
+                exec_px=ask; pnl=pos["entry"]-exec_px
+                reason = "SL" if exec_px>=pos["sl"] else ("TP" if exec_px<=pos["tp"] else None)
+            if reason is None and hold>=EARLY_PROFIT_MS and pnl>0:
+                reason="PROFIT"
+            if reason is None and hold>=pos["max_hold"]:
+                reason="TIME"
+            if reason:
+                trades.append({
+                    "entry_t":pos["t"],"exit_t":t,"dir":pos["dir"],"entry":pos["entry"],
+                    "exit":exec_px,"pnl":pnl,"hold_ms":hold,"reason":reason,
+                    "spread_entry":pos["spread"],"phase":pos["phase"]
+                })
+                pos=None
+            continue
+
+        spread=ask-bid
+        sig=base_signal(buf)
+
+        # Create a seed event only when flat and no active event.
+        if pending is None and sig!=0:
+            if spread>MAX_SPREAD:
+                spread_rej+=1
+                continue
+            if t-last_entry<MIN_BETWEEN_MS:
+                continue
+            seed_mom=buf.momentum(MOM_N)
+            pending={"t":t,"dir":sig,"seed_px":bid,"seed_mom":seed_mom}
+            continue
+
+        if pending is None:
+            continue
+
+        age=t-pending["t"]
+        seed_dir=pending["dir"]
+        if age>10000:
+            expired+=1; pending=None
+            continue
+
+        if spread>MAX_SPREAD:
+            spread_rej+=1
+            continue
+
+        mom10=buf.momentum(MOM_N)
+        consec=buf.consecutive()
+        xs=buf.last(4)
+        mom3=(xs[-1]-xs[0]) if len(xs)>=4 else 0.0
+
+        # FOLLOW phase: require time persistence plus same-direction momentum
+        # that is at least as strong as the seed. This explicitly tests
+        # whether momentum has a short useful life instead of entering at t=0.
+        if 250 <= age <= 1000 and mode in ("FOLLOW","HYBRID"):
+            same_mom=(mom10*seed_dir)>0
+            accel=abs(mom10)>=max(abs(pending["seed_mom"]),MOM_THR)
+            same_consec=(abs(consec)>=CONSEC_MIN and (1 if consec>0 else -1)==seed_dir)
+            if same_mom and accel and same_consec:
+                pos=open_pos(t,ask,bid,seed_dir,spread,"FOLLOW")
+                last_entry=t; pending=None
+                continue
+            follow_rej+=1
+
+        # 1-3 seconds is deliberately a no-trade dead zone.
+        if age < 3000:
+            continue
+
+        # REVERSE phase: seed momentum must have actually turned.
+        # Require a short opposite move and >=2 opposite consecutive ticks.
+        if 3000 <= age <= 10000 and mode in ("REVERSE","HYBRID"):
+            opp3=(mom3*seed_dir) < -0.01
+            opp_consec=(abs(consec)>=2 and (1 if consec>0 else -1)==-seed_dir)
+            retraced=((bid-pending["seed_px"])*seed_dir) < 0
+            if opp3 and opp_consec and retraced:
+                pos=open_pos(t,ask,bid,-seed_dir,spread,"REVERSE")
+                last_entry=t; pending=None
+                continue
+            reverse_rej+=1
+
+    if pos and ticks:
+        t,ask,bid,_,_=ticks[-1]
+        px=bid if pos["dir"]==1 else ask
+        pnl=(px-pos["entry"]) if pos["dir"]==1 else (pos["entry"]-px)
+        trades.append({"entry_t":pos["t"],"exit_t":t,"dir":pos["dir"],"entry":pos["entry"],
+                       "exit":px,"pnl":pnl,"hold_ms":t-pos["t"],"reason":"EOD",
+                       "spread_entry":pos["spread"],"phase":pos["phase"]})
+    return trades,{"spread_rejects":spread_rej,"follow_rejects":follow_rej,
+                   "reverse_rejects":reverse_rej,"expired_events":expired}
+
 def metrics(trades,days):
     pn=[x["pnl"] for x in trades]
     wins=[x for x in pn if x>0]; losses=[x for x in pn if x<0]
@@ -325,6 +440,16 @@ for v,rev,hold_ms in configs:
         w=csv.DictWriter(f,fieldnames=["entry_t","exit_t","dir","entry","exit","pnl","hold_ms","reason","spread_entry"])
         w.writeheader(); w.writerows(tr)
 
+# Direction State Machine A/B: timing rather than simple 180-degree reversal.
+for v,mode in (("D_F","FOLLOW"),("D_R","REVERSE"),("D_H","HYBRID")):
+    tr,rej=run_direction_state_machine(ticks,mode=mode)
+    summary["variants"][v]={"direction_state_machine":mode,
+                            "metrics":metrics(tr,active_days),"rejects":rej}
+    fields=["entry_t","exit_t","dir","entry","exit","pnl","hold_ms","reason","spread_entry","phase"]
+    with (OUT/f"trades_{v}.csv").open("w",newline="") as f:
+        w=csv.DictWriter(f,fieldnames=fields)
+        w.writeheader(); w.writerows(tr)
+
 summary["warnings"]=[
  "Raw Dukascopy Bid/Ask tick replay, but not a broker-specific Exness fill model.",
  "No explicit extra commission/slippage added in v1; spread is paid through executable Ask/Bid fills.",
@@ -336,5 +461,5 @@ with (OUT/"summary.csv").open("w",newline="") as f:
     w=csv.writer(f); w.writerow(["variant","N","N_per_day","WR","PF","EV","Net","MaxDD","max_loss_streak","avg_hold_ms","avg_spread","spread_rej","persist_rej","velocity_rej"])
     for v,z in summary["variants"].items():
         m=z["metrics"]; r=z["rejects"]
-        w.writerow([v,m["N"],m["N_per_day"],m["WR"],m["PF"],m["EV_price_units"],m["Net_price_units"],m["MaxDD_price_units"],m["max_loss_streak"],m["avg_hold_ms"],m["avg_entry_spread"],r["spread_rejects"],r["persistence_rejects"],r["velocity_rejects"]])
+        w.writerow([v,m["N"],m["N_per_day"],m["WR"],m["PF"],m["EV_price_units"],m["Net_price_units"],m["MaxDD_price_units"],m["max_loss_streak"],m["avg_hold_ms"],m["avg_entry_spread"],r.get("spread_rejects",0),r.get("persistence_rejects",0),r.get("velocity_rejects",0)])
 print(json.dumps(summary,indent=2))
