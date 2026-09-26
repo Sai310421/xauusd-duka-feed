@@ -25,8 +25,8 @@ HOST = "https://datafeed.dukascopy.com/datafeed"
 REC = struct.Struct(">IIIff")  # ms from hour, ask_raw, bid_raw, ask_vol, bid_vol
 SCALE = 1000.0
 POINT = 0.001
-START = dt.date(2026, 9, 21)
-END   = dt.date(2026, 9, 25)
+START = dt.date.fromisoformat(os.environ.get("RAW_START","2026-09-21"))
+END   = dt.date.fromisoformat(os.environ.get("RAW_END","2026-09-25"))
 
 # Upstream HFT defaults
 BUFFER_N = 30
