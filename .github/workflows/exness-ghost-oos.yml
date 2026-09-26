@@ -1,0 +1,32 @@
+name: Exness Ghost OOS
+
+on:
+  push:
+    branches: [feature/tickscalper-rawtick-v1-20260927]
+    paths:
+      - "scripts/exness_ghost_oos.py"
+      - ".github/workflows/exness-ghost-oos.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: nautilus/cache/exness-ticks
+          key: exness-xauusd-2026-09-v1
+          restore-keys: |
+            exness-xauusd-
+      - run: python3 -u scripts/exness_ghost_oos.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exness-ghost-oos
+          path: results/exness-ghost-oos/
+          if-no-files-found: error
+          retention-days: 30
