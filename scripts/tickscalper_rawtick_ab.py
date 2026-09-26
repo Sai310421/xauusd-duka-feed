@@ -468,6 +468,9 @@ def run_strict_execution(ticks, mode="MARKET", pullback=0.0, entry_spread_cap=MA
         sig=base_signal(buf)
 
         if signal is None and sig!=0:
+            if (ask-bid)>MAX_SPREAD:
+                spread_rej+=1
+                continue
             if t-last_entry<MIN_BETWEEN_MS:
                 continue
             signal={"t":t,"dir":sig,"seed_mom":buf.momentum(MOM_N)}
