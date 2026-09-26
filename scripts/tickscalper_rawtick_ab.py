@@ -393,6 +393,133 @@ def run_direction_state_machine(ticks, mode="HYBRID", follow_min_ms=250, follow_
     return trades,{"spread_rejects":spread_rej,"follow_rejects":follow_rej,
                    "reverse_rejects":reverse_rej,"expired_events":expired}
 
+
+def run_strict_execution(ticks, mode="MARKET", pullback=0.0, entry_spread_cap=MAX_SPREAD, pending_ms=5000):
+    """Freeze D_F_STRICT direction/timing and vary execution only.
+    Signal confirmation is identical to D_F_STRICT:
+    250-1000 ms, same-direction momentum >= seed, >=3 consecutive ticks.
+    """
+    buf=TickBuf(BUFFER_N)
+    signal=None
+    order=None
+    pos=None
+    trades=[]
+    last_entry=-10**18
+    signal_count=fill_count=expired_count=spread_rej=0
+
+    def execute(t,ask,bid,direction):
+        if direction==1:
+            entry=ask; sl=entry-SL; tp=entry+TP
+        else:
+            entry=bid; sl=entry+SL; tp=entry-TP
+        return {"t":t,"dir":direction,"entry":entry,"entry_mid":(ask+bid)/2,
+                "sl":sl,"tp":tp,"spread":ask-bid,"max_hold":2000}
+
+    for t,ask,bid,av,bv in ticks:
+        buf.push(bid)
+
+        if pos is not None:
+            hold=t-pos["t"]
+            if pos["dir"]==1:
+                px=bid; pnl=px-pos["entry"]
+                reason="SL" if px<=pos["sl"] else ("TP" if px>=pos["tp"] else None)
+            else:
+                px=ask; pnl=pos["entry"]-px
+                reason="SL" if px>=pos["sl"] else ("TP" if px<=pos["tp"] else None)
+            if reason is None and hold>=EARLY_PROFIT_MS and pnl>0:
+                reason="PROFIT"
+            if reason is None and hold>=pos["max_hold"]:
+                reason="TIME"
+            if reason:
+                mid=(ask+bid)/2
+                gross=(mid-pos["entry_mid"]) if pos["dir"]==1 else (pos["entry_mid"]-mid)
+                trades.append({
+                    "entry_t":pos["t"],"exit_t":t,"dir":pos["dir"],
+                    "entry":pos["entry"],"exit":px,"pnl":pnl,
+                    "gross_pnl":gross,"cost_drag":gross-pnl,
+                    "hold_ms":hold,"reason":reason,"spread_entry":pos["spread"],
+                    "exec_mode":mode
+                })
+                pos=None
+            continue
+
+        # Pending virtual/pullback order created only after strict confirmation.
+        if order is not None:
+            age=t-order["t"]
+            if age>pending_ms:
+                expired_count+=1
+                order=None
+            else:
+                spread=ask-bid
+                if spread>entry_spread_cap:
+                    spread_rej+=1
+                    continue
+                if order["dir"]==1:
+                    improved = ask <= order["ref_ask"] - pullback
+                else:
+                    improved = bid >= order["ref_bid"] + pullback
+                if improved:
+                    pos=execute(t,ask,bid,order["dir"])
+                    fill_count+=1
+                    last_entry=t
+                    order=None
+            continue
+
+        sig=base_signal(buf)
+
+        if signal is None and sig!=0:
+            if t-last_entry<MIN_BETWEEN_MS:
+                continue
+            signal={"t":t,"dir":sig,"seed_mom":buf.momentum(MOM_N)}
+            continue
+
+        if signal is None:
+            continue
+
+        age=t-signal["t"]
+        if age>1000:
+            signal=None
+            continue
+        if age<250:
+            continue
+
+        direction=signal["dir"]
+        mom10=buf.momentum(MOM_N)
+        consec=buf.consecutive()
+        same_mom=(mom10*direction)>0
+        accel=abs(mom10)>=max(abs(signal["seed_mom"]),MOM_THR)
+        same_consec=(abs(consec)>=3 and (1 if consec>0 else -1)==direction)
+        if not (same_mom and accel and same_consec):
+            continue
+
+        # Strict signal confirmed. Only execution changes below.
+        signal_count+=1
+        spread=ask-bid
+        if mode=="MARKET":
+            if spread<=entry_spread_cap:
+                pos=execute(t,ask,bid,direction)
+                fill_count+=1
+                last_entry=t
+            else:
+                spread_rej+=1
+        else:
+            order={"t":t,"dir":direction,"ref_ask":ask,"ref_bid":bid}
+        signal=None
+
+    if pos is not None and ticks:
+        t,ask,bid,_,_=ticks[-1]
+        px=bid if pos["dir"]==1 else ask
+        pnl=(px-pos["entry"]) if pos["dir"]==1 else (pos["entry"]-px)
+        mid=(ask+bid)/2
+        gross=(mid-pos["entry_mid"]) if pos["dir"]==1 else (pos["entry_mid"]-mid)
+        trades.append({"entry_t":pos["t"],"exit_t":t,"dir":pos["dir"],
+                       "entry":pos["entry"],"exit":px,"pnl":pnl,
+                       "gross_pnl":gross,"cost_drag":gross-pnl,
+                       "hold_ms":t-pos["t"],"reason":"EOD",
+                       "spread_entry":pos["spread"],"exec_mode":mode})
+    return trades,{"signals":signal_count,"fills":fill_count,"expired":expired_count,
+                   "spread_rejects":spread_rej}
+
 def metrics(trades,days):
     pn=[x["pnl"] for x in trades]
     gross=[x.get("gross_pnl",x["pnl"]) for x in trades]
@@ -477,6 +604,27 @@ for v,mode,fmin,fmax,ratio,consec_n in dconfigs:
                             "follow_ratio":ratio,"follow_consec":consec_n,
                             "metrics":metrics(tr,active_days),"rejects":rej}
     fields=["entry_t","exit_t","dir","entry","exit","pnl","gross_pnl","cost_drag","hold_ms","reason","spread_entry","phase"]
+    with (OUT/f"trades_{v}.csv").open("w",newline="") as f:
+        w=csv.DictWriter(f,fieldnames=fields)
+        w.writeheader(); w.writerows(tr)
+
+# Execution-only A/B with D_F_STRICT frozen.
+exec_configs=[
+    # id, mode, pullback, spread_cap, pending_ms
+    ("E_MKT","MARKET",0.00,0.40,0),
+    ("E_S25","MARKET",0.00,0.25,0),
+    ("E_P10","PULLBACK",0.10,0.40,5000),
+    ("E_P20","PULLBACK",0.20,0.40,5000),
+    ("E_P10S25","PULLBACK",0.10,0.25,5000),
+]
+for v,mode,pb,scap,pms in exec_configs:
+    tr,rej=run_strict_execution(ticks,mode=mode,pullback=pb,
+                                entry_spread_cap=scap,pending_ms=pms)
+    summary["variants"][v]={"execution_mode":mode,"pullback":pb,
+                            "entry_spread_cap":scap,"pending_ms":pms,
+                            "metrics":metrics(tr,active_days),"rejects":rej}
+    fields=["entry_t","exit_t","dir","entry","exit","pnl","gross_pnl","cost_drag",
+            "hold_ms","reason","spread_entry","exec_mode"]
     with (OUT/f"trades_{v}.csv").open("w",newline="") as f:
         w=csv.DictWriter(f,fieldnames=fields)
         w.writeheader(); w.writerows(tr)
