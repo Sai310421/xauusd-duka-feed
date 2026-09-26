@@ -195,7 +195,7 @@ summary={"period":"2026-09-21..25, 07:00-18:00 UTC","frozen":"Reverse + D_F_STRI
 all_bucket_rows=[]
 for sym in SYMBOLS:
     ticks=load_ticks(sym); trades=replay(ticks)
-    fields=["entry_t","exit_t","dir","seed_dir","entry","exit","pnl_no_comm","hold_ms","reason","spread_entry","hour_utc","hour_jst"]
+    fields=["entry_t","exit_t","dir","seed_dir","entry","exit","pnl_no_comm","hold_ms","reason","spread_entry","hour_utc","hour_jst","sl","tp"]
     for n in FEATURE_WINDOWS:
         fields += [f"mom{n}",f"mom{n}_abs",f"mom{n}_aligned_seed",f"mom{n}_per_tick"]
     with (OUT/f"trades_{sym}.csv").open("w",newline="") as f:
