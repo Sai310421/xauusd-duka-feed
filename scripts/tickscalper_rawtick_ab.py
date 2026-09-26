@@ -209,7 +209,10 @@ def run_variant(ticks,atrmap,variant,reverse=False,max_hold_ms=MAX_HOLD_MS):
             if reason:
                 trades.append({
                     "entry_t":pos["t"],"exit_t":t,"dir":pos["dir"],"entry":pos["entry"],
-                    "exit":exec_px,"pnl":pnl,"hold_ms":hold,"reason":reason,
+                    "exit":exec_px,"pnl":pnl,
+                    "gross_pnl":(((ask+bid)/2-pos["entry_mid"]) if pos["dir"]==1 else (pos["entry_mid"]-(ask+bid)/2)),
+                    "cost_drag":((((ask+bid)/2-pos["entry_mid"]) if pos["dir"]==1 else (pos["entry_mid"]-(ask+bid)/2))-pnl),
+                    "hold_ms":hold,"reason":reason,
                     "spread_entry":pos["spread"]
                 })
                 pos=None
@@ -252,7 +255,7 @@ def run_variant(ticks,atrmap,variant,reverse=False,max_hold_ms=MAX_HOLD_MS):
             entry=ask; sl=entry-SL; tp=entry+TP
         else:
             entry=bid; sl=entry+SL; tp=entry-TP
-        pos={"t":t,"dir":trade_sig,"entry":entry,"sl":sl,"tp":tp,"spread":spread}
+        pos={"t":t,"dir":trade_sig,"entry":entry,"entry_mid":(ask+bid)/2,"sl":sl,"tp":tp,"spread":spread}
         last_entry=t
         cand_dir=0; cand_count=0; cand_start=0
 
@@ -262,7 +265,10 @@ def run_variant(ticks,atrmap,variant,reverse=False,max_hold_ms=MAX_HOLD_MS):
         px=bid if pos["dir"]==1 else ask
         pnl=(px-pos["entry"]) if pos["dir"]==1 else (pos["entry"]-px)
         trades.append({"entry_t":pos["t"],"exit_t":t,"dir":pos["dir"],"entry":pos["entry"],
-                       "exit":px,"pnl":pnl,"hold_ms":t-pos["t"],"reason":"EOD",
+                       "exit":px,"pnl":pnl,
+                       "gross_pnl":((((ask+bid)/2)-pos["entry_mid"]) if pos["dir"]==1 else (pos["entry_mid"]-((ask+bid)/2))),
+                       "cost_drag":(((((ask+bid)/2)-pos["entry_mid"]) if pos["dir"]==1 else (pos["entry_mid"]-((ask+bid)/2)))-pnl),
+                       "hold_ms":t-pos["t"],"reason":"EOD",
                        "spread_entry":pos["spread"]})
     return trades,{"spread_rejects":spread_rej,"velocity_rejects":vel_rej,"persistence_rejects":persist_rej}
 
@@ -283,7 +289,7 @@ def run_direction_state_machine(ticks, mode="HYBRID", follow_min_ms=250, follow_
         else:
             entry=bid; sl=entry+SL; tp=entry-TP
         max_hold = 2000 if phase=="FOLLOW" else 10000
-        return {"t":t,"dir":trade_dir,"entry":entry,"sl":sl,"tp":tp,
+        return {"t":t,"dir":trade_dir,"entry":entry,"entry_mid":(ask+bid)/2,"sl":sl,"tp":tp,
                 "spread":spread,"phase":phase,"max_hold":max_hold}
 
     for t,ask,bid,av,bv in ticks:
@@ -304,7 +310,10 @@ def run_direction_state_machine(ticks, mode="HYBRID", follow_min_ms=250, follow_
             if reason:
                 trades.append({
                     "entry_t":pos["t"],"exit_t":t,"dir":pos["dir"],"entry":pos["entry"],
-                    "exit":exec_px,"pnl":pnl,"hold_ms":hold,"reason":reason,
+                    "exit":exec_px,"pnl":pnl,
+                    "gross_pnl":(((ask+bid)/2-pos["entry_mid"]) if pos["dir"]==1 else (pos["entry_mid"]-(ask+bid)/2)),
+                    "cost_drag":((((ask+bid)/2-pos["entry_mid"]) if pos["dir"]==1 else (pos["entry_mid"]-(ask+bid)/2))-pnl),
+                    "hold_ms":hold,"reason":reason,
                     "spread_entry":pos["spread"],"phase":pos["phase"]
                 })
                 pos=None
@@ -376,15 +385,21 @@ def run_direction_state_machine(ticks, mode="HYBRID", follow_min_ms=250, follow_
         px=bid if pos["dir"]==1 else ask
         pnl=(px-pos["entry"]) if pos["dir"]==1 else (pos["entry"]-px)
         trades.append({"entry_t":pos["t"],"exit_t":t,"dir":pos["dir"],"entry":pos["entry"],
-                       "exit":px,"pnl":pnl,"hold_ms":t-pos["t"],"reason":"EOD",
+                       "exit":px,"pnl":pnl,
+                       "gross_pnl":((((ask+bid)/2)-pos["entry_mid"]) if pos["dir"]==1 else (pos["entry_mid"]-((ask+bid)/2))),
+                       "cost_drag":(((((ask+bid)/2)-pos["entry_mid"]) if pos["dir"]==1 else (pos["entry_mid"]-((ask+bid)/2)))-pnl),
+                       "hold_ms":t-pos["t"],"reason":"EOD",
                        "spread_entry":pos["spread"],"phase":pos["phase"]})
     return trades,{"spread_rejects":spread_rej,"follow_rejects":follow_rej,
                    "reverse_rejects":reverse_rej,"expired_events":expired}
 
 def metrics(trades,days):
     pn=[x["pnl"] for x in trades]
+    gross=[x.get("gross_pnl",x["pnl"]) for x in trades]
     wins=[x for x in pn if x>0]; losses=[x for x in pn if x<0]
+    gw=[x for x in gross if x>0]; gl=[x for x in gross if x<0]
     pf=sum(wins)/abs(sum(losses)) if losses else (999.0 if wins else 0.0)
+    gross_pf=sum(gw)/abs(sum(gl)) if gl else (999.0 if gw else 0.0)
     eq=0.0; peak=0.0; mdd=0.0; streak=mxst=0
     for x in pn:
         eq+=x; peak=max(peak,eq); mdd=min(mdd,eq-peak)
@@ -395,8 +410,12 @@ def metrics(trades,days):
     return {
         "N":len(trades),"N_per_day":len(trades)/max(days,1),
         "WR":len(wins)/len(trades) if trades else 0.0,
-        "PF":pf,"EV_price_units":sum(pn)/len(pn) if pn else 0.0,
-        "Net_price_units":sum(pn),"MaxDD_price_units":mdd,
+        "PF":pf,"Gross_PF_mid":gross_pf,
+        "EV_price_units":sum(pn)/len(pn) if pn else 0.0,
+        "Gross_EV_mid":sum(gross)/len(gross) if gross else 0.0,
+        "Avg_Cost_Drag":(sum(gross)-sum(pn))/len(pn) if pn else 0.0,
+        "Net_price_units":sum(pn),"Gross_Net_mid":sum(gross),
+        "MaxDD_price_units":mdd,
         "max_loss_streak":mxst,
         "avg_hold_ms":sum(holds)/len(holds) if holds else 0.0,
         "median_hold_ms":statistics.median(holds) if holds else 0.0,
@@ -437,7 +456,7 @@ for v,rev,hold_ms in configs:
     summary["variants"][v]={"reverse":rev,"max_hold_ms":hold_ms,
                             "metrics":metrics(tr,active_days),"rejects":rej}
     with (OUT/f"trades_{v}.csv").open("w",newline="") as f:
-        w=csv.DictWriter(f,fieldnames=["entry_t","exit_t","dir","entry","exit","pnl","hold_ms","reason","spread_entry"])
+        w=csv.DictWriter(f,fieldnames=["entry_t","exit_t","dir","entry","exit","pnl","gross_pnl","cost_drag","hold_ms","reason","spread_entry"])
         w.writeheader(); w.writerows(tr)
 
 # Direction State Machine A/B: small pre-specified timing grid.
@@ -457,7 +476,7 @@ for v,mode,fmin,fmax,ratio,consec_n in dconfigs:
                             "follow_min_ms":fmin,"follow_max_ms":fmax,
                             "follow_ratio":ratio,"follow_consec":consec_n,
                             "metrics":metrics(tr,active_days),"rejects":rej}
-    fields=["entry_t","exit_t","dir","entry","exit","pnl","hold_ms","reason","spread_entry","phase"]
+    fields=["entry_t","exit_t","dir","entry","exit","pnl","gross_pnl","cost_drag","hold_ms","reason","spread_entry","phase"]
     with (OUT/f"trades_{v}.csv").open("w",newline="") as f:
         w=csv.DictWriter(f,fieldnames=fields)
         w.writeheader(); w.writerows(tr)
