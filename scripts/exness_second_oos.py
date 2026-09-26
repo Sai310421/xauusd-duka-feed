@@ -141,11 +141,25 @@ def met(rows,c):
 
 ticks=load();tr=replay(ticks)
 main=[r for r in tr if r["m3pt"]>M3_Q4 and r["m5pt"]>M5_Q4]
-vol=[r for r in main if VOL_Q25<r["ret_abs20"]<=VOL_Q75]
+
+# Adaptive causal BOT-02 Vol Gate:
+# use only prior Main-entry ret_abs20 values, never current/future PnL.
+from collections import deque as _dq
+hist=_dq(maxlen=200)
+vol=[]
+for r in main:
+    if len(hist)>=50:
+        s=sorted(hist)
+        q25=s[int((len(s)-1)*0.25)]
+        q75=s[int((len(s)-1)*0.75)]
+        if q25 < r["ret_abs20"] <= q75:
+            vol.append(r)
+    hist.append(r["ret_abs20"])
+
 final=[r for r in vol if r["hour"] in HOURS]
 
 res={"period":"2026-09-07..11 second OOS",
-     "frozen":{"m3":M3_Q4,"m5":M5_Q4,"vol_q25":VOL_Q25,"vol_q75":VOL_Q75,"hours":sorted(HOURS)},
+     "frozen":{"m3":M3_Q4,"m5":M5_Q4,"vol_mode":"causal rolling Q25-Q75","vol_history":200,"vol_min_history":50,"hours":sorted(HOURS)},
      "counts":{"all":len(tr),"main":len(main),"vol":len(vol),"final":len(final)},
      "metrics":{f"{c:.2f}":met(final,c) for c in COMMS}}
 (OUT/"summary.json").write_text(json.dumps(res,indent=2))
