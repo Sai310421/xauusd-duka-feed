@@ -178,7 +178,7 @@ def base_signal(buf):
     if fast==0 or slow==0 or (1 if fast>slow else -1)!=sig:return 0
     return sig
 
-def run_variant(ticks,atrmap,variant):
+def run_variant(ticks,atrmap,variant,reverse=False,max_hold_ms=MAX_HOLD_MS):
     buf=TickBuf(BUFFER_N)
     pos=None; trades=[]
     last_entry=-10**18
@@ -197,7 +197,7 @@ def run_variant(ticks,atrmap,variant):
                 if exec_px<=pos["sl"]: reason="SL"
                 elif exec_px>=pos["tp"]: reason="TP"
                 elif hold>=EARLY_PROFIT_MS and pnl>0: reason="PROFIT"
-                elif hold>=MAX_HOLD_MS: reason="TIME"
+                elif hold>=max_hold_ms: reason="TIME"
             else:
                 exec_px=ask
                 pnl=pos["entry"]-exec_px
@@ -205,7 +205,7 @@ def run_variant(ticks,atrmap,variant):
                 if exec_px>=pos["sl"]: reason="SL"
                 elif exec_px<=pos["tp"]: reason="TP"
                 elif hold>=EARLY_PROFIT_MS and pnl>0: reason="PROFIT"
-                elif hold>=MAX_HOLD_MS: reason="TIME"
+                elif hold>=max_hold_ms: reason="TIME"
             if reason:
                 trades.append({
                     "entry_t":pos["t"],"exit_t":t,"dir":pos["dir"],"entry":pos["entry"],
@@ -247,11 +247,12 @@ def run_variant(ticks,atrmap,variant):
             if t<vel_block_until:
                 vel_rej+=1; continue
 
-        if sig==1:
+        trade_sig = -sig if reverse else sig
+        if trade_sig==1:
             entry=ask; sl=entry-SL; tp=entry+TP
         else:
             entry=bid; sl=entry+SL; tp=entry-TP
-        pos={"t":t,"dir":sig,"entry":entry,"sl":sl,"tp":tp,"spread":spread}
+        pos={"t":t,"dir":trade_sig,"entry":entry,"sl":sl,"tp":tp,"spread":spread}
         last_entry=t
         cand_dir=0; cand_count=0; cand_start=0
 
@@ -305,9 +306,21 @@ summary={"period":{"start":str(START),"end":str(END),"active_days":active_days},
                              "p90":qtile(spreads_all,.90),"p95":qtile(spreads_all,.95),
                              "p99":qtile(spreads_all,.99)},
          "raw_bid_ask":True,"variants":{}}
-for v in ("A0","B1","B2","B3"):
-    tr,rej=run_variant(ticks,atrmap,v)
-    summary["variants"][v]={"metrics":metrics(tr,active_days),"rejects":rej}
+configs=[
+    ("A0",False,900),
+    ("B1",False,900),
+    ("B2",False,900),
+    ("B3",False,900),
+    ("R09",True,900),
+    ("R2",True,2000),
+    ("R5",True,5000),
+    ("R10",True,10000),
+]
+for v,rev,hold_ms in configs:
+    gate = v if v in ("A0","B1","B2","B3") else "A0"
+    tr,rej=run_variant(ticks,atrmap,gate,reverse=rev,max_hold_ms=hold_ms)
+    summary["variants"][v]={"reverse":rev,"max_hold_ms":hold_ms,
+                            "metrics":metrics(tr,active_days),"rejects":rej}
     with (OUT/f"trades_{v}.csv").open("w",newline="") as f:
         w=csv.DictWriter(f,fieldnames=["entry_t","exit_t","dir","entry","exit","pnl","hold_ms","reason","spread_entry"])
         w.writeheader(); w.writerows(tr)
