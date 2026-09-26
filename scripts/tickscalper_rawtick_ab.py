@@ -84,16 +84,27 @@ def fetch_hour(day: dt.date, hour: int):
 
 def load_ticks():
     all_ticks=[]
+    jobs=[]
     d=START
-    hourly={}
+    days=[]
     while d<=END:
         if d.weekday()<5:
-            n=0
+            days.append(d)
             for h in range(24):
-                x=fetch_hour(d,h)
-                n += len(x); all_ticks.extend(x)
-            hourly[str(d)] = n
+                jobs.append((d,h))
         d += dt.timedelta(days=1)
+    hourly={str(d):0 for d in days}
+    # Parallelize only transport/decode; replay ordering is restored below.
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        futs={ex.submit(fetch_hour,d,h):(d,h) for d,h in jobs}
+        for fut in as_completed(futs):
+            d,h=futs[fut]
+            try: x=fut.result()
+            except Exception as e:
+                print("fetch error",d,h,repr(e)); x=[]
+            hourly[str(d)] += len(x)
+            all_ticks.extend(x)
+            print("hour",d,h,"ticks",len(x))
     all_ticks.sort(key=lambda x:x[0])
     return all_ticks,hourly
 
