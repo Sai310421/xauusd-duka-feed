@@ -267,7 +267,7 @@ def run_variant(ticks,atrmap,variant,reverse=False,max_hold_ms=MAX_HOLD_MS):
     return trades,{"spread_rejects":spread_rej,"velocity_rejects":vel_rej,"persistence_rejects":persist_rej}
 
 
-def run_direction_state_machine(ticks, mode="HYBRID"):
+def run_direction_state_machine(ticks, mode="HYBRID", follow_min_ms=250, follow_max_ms=1000, follow_ratio=1.0, follow_consec=3):
     """Derived timing hypothesis:
     seed momentum -> 0.25-1.0s follow if acceleration persists;
     1-3s dead zone; 3-10s reverse only after opposite micro-tick confirmation.
@@ -345,10 +345,10 @@ def run_direction_state_machine(ticks, mode="HYBRID"):
         # FOLLOW phase: require time persistence plus same-direction momentum
         # that is at least as strong as the seed. This explicitly tests
         # whether momentum has a short useful life instead of entering at t=0.
-        if 250 <= age <= 1000 and mode in ("FOLLOW","HYBRID"):
+        if follow_min_ms <= age <= follow_max_ms and mode in ("FOLLOW","HYBRID"):
             same_mom=(mom10*seed_dir)>0
-            accel=abs(mom10)>=max(abs(pending["seed_mom"]),MOM_THR)
-            same_consec=(abs(consec)>=CONSEC_MIN and (1 if consec>0 else -1)==seed_dir)
+            accel=abs(mom10)>=max(abs(pending["seed_mom"])*follow_ratio,MOM_THR)
+            same_consec=(abs(consec)>=follow_consec and (1 if consec>0 else -1)==seed_dir)
             if same_mom and accel and same_consec:
                 pos=open_pos(t,ask,bid,seed_dir,spread,"FOLLOW")
                 last_entry=t; pending=None
@@ -440,10 +440,22 @@ for v,rev,hold_ms in configs:
         w=csv.DictWriter(f,fieldnames=["entry_t","exit_t","dir","entry","exit","pnl","hold_ms","reason","spread_entry"])
         w.writeheader(); w.writerows(tr)
 
-# Direction State Machine A/B: timing rather than simple 180-degree reversal.
-for v,mode in (("D_F","FOLLOW"),("D_R","REVERSE"),("D_H","HYBRID")):
-    tr,rej=run_direction_state_machine(ticks,mode=mode)
+# Direction State Machine A/B: small pre-specified timing grid.
+dconfigs=[
+    # id, mode, min_ms, max_ms, ratio, consec
+    ("D_F_STRICT","FOLLOW",250,1000,1.00,3),
+    ("D_F_MID","FOLLOW",150,1250,0.90,2),
+    ("D_F_WIDE","FOLLOW",100,1500,0.75,2),
+    ("D_H_MID","HYBRID",150,1250,0.90,2),
+]
+for v,mode,fmin,fmax,ratio,consec_n in dconfigs:
+    tr,rej=run_direction_state_machine(
+        ticks,mode=mode,follow_min_ms=fmin,follow_max_ms=fmax,
+        follow_ratio=ratio,follow_consec=consec_n
+    )
     summary["variants"][v]={"direction_state_machine":mode,
+                            "follow_min_ms":fmin,"follow_max_ms":fmax,
+                            "follow_ratio":ratio,"follow_consec":consec_n,
                             "metrics":metrics(tr,active_days),"rejects":rej}
     fields=["entry_t","exit_t","dir","entry","exit","pnl","hold_ms","reason","spread_entry","phase"]
     with (OUT/f"trades_{v}.csv").open("w",newline="") as f:
