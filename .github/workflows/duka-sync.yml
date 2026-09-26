@@ -22,6 +22,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Restore TickScalper Raw Tick cache
+        if: github.ref == 'refs/heads/feature/tickscalper-rawtick-v1-20260927'
+        uses: actions/cache@v4
+        with:
+          path: nautilus/cache/rawtick-xauusd
+          key: rawtick-feature-cache-v1
+          restore-keys: |
+            rawtick-feature-cache-
+
       - name: TickScalper Raw Tick A0-B3
         if: github.ref == 'refs/heads/feature/tickscalper-rawtick-v1-20260927'
         env:
