@@ -149,7 +149,7 @@ def tick_diagnostics(ticks):
     return {"same_bid_ratio":same_bid/n,"same_quote_ratio":same_quote/n,
             "dt_ms_p10":q(.10),"dt_ms_p50":q(.50),"dt_ms_p90":q(.90)}
 
-def run(ticks, reverse=False):
+def run(ticks, reverse=False, early_profit=True, max_hold_ms=MAX_HOLD_MS, entry_spread_cap=SEED_SPREAD_CAP):
     buf=TickBuf(BUFFER_N); signal=None; pos=None; trades=[]; last_entry=-10**18
     spread_rej=0
     for t,ask,bid in ticks:
@@ -162,8 +162,8 @@ def run(ticks, reverse=False):
             else:
                 px=ask; pnl=pos["entry"]-px
                 reason="SL" if px>=pos["sl"] else ("TP" if px<=pos["tp"] else None)
-            if reason is None and hold>=EARLY_PROFIT_MS and pnl>0: reason="PROFIT"
-            if reason is None and hold>=MAX_HOLD_MS: reason="TIME"
+            if early_profit and reason is None and hold>=EARLY_PROFIT_MS and pnl>0: reason="PROFIT"
+            if reason is None and hold>=max_hold_ms: reason="TIME"
             if reason:
                 mid=(ask+bid)/2
                 gross=(mid-pos["entry_mid"]) if pos["dir"]==1 else (pos["entry_mid"]-mid)
@@ -176,7 +176,7 @@ def run(ticks, reverse=False):
 
         sig=base_signal(buf)
         if signal is None and sig:
-            if ask-bid>SEED_SPREAD_CAP:
+            if ask-bid>entry_spread_cap:
                 spread_rej+=1; continue
             if t-last_entry<MIN_BETWEEN_MS: continue
             signal={"t":t,"dir":sig,"seed_mom":buf.momentum(MOM_N)}
@@ -185,7 +185,7 @@ def run(ticks, reverse=False):
         age=t-signal["t"]
         if age>10000:
             signal=None; continue
-        if ask-bid>SEED_SPREAD_CAP:
+        if ask-bid>entry_spread_cap:
             spread_rej+=1; continue
         if not (FOLLOW_MIN_MS<=age<=FOLLOW_MAX_MS): continue
         d=signal["dir"]; mom=buf.momentum(MOM_N); c=buf.consecutive()
@@ -250,6 +250,33 @@ for symbol in VARIANTS:
                 with (OUT/f"trades_{symbol}_{mode}_{direction}.csv").open("w",newline="") as f:
                     w=csv.DictWriter(f,fieldnames=fields); w.writeheader(); w.writerows(trades)
             z["modes"][mode]=mz
+
+        # Exness-specific reverse exit/cost A/B after feed normalization proved irrelevant.
+        rz={}
+        reverse_configs=[
+            # id, early_profit, max_hold_ms, spread_cap
+            ("R_EP20",True,20000,0.40),
+            ("R_H20",False,20000,0.40),
+            ("R_H60",False,60000,0.40),
+            ("R_H120",False,120000,0.40),
+            ("R_H60_S05",False,60000,0.05),
+            ("R_H60_S09",False,60000,0.09),
+        ]
+        for rid,ep,hms,scap in reverse_configs:
+            trades,rej=run(ticks,reverse=True,early_profit=ep,max_hold_ms=hms,entry_spread_cap=scap)
+            dz={"early_profit":ep,"max_hold_ms":hms,"entry_spread_cap":scap,
+                "spread_rejects":rej,"commission_scenarios":{}}
+            for comm in COMMISSION_RT_SCENARIOS:
+                dz["commission_scenarios"][f"{comm:.3f}"]=metrics(trades,comm)
+            if trades:
+                gross=[x["gross_mid"] for x in trades]; raw=[x["pnl_no_comm"] for x in trades]
+                dz["gross_mid_EV"]=sum(gross)/len(gross)
+                dz["bidask_EV_before_commission"]=sum(raw)/len(raw)
+                dz["avg_spread_drag"]=sum(x["spread_drag"] for x in trades)/len(trades)
+            else:
+                dz["gross_mid_EV"]=dz["bidask_EV_before_commission"]=dz["avg_spread_drag"]=0
+            rz[rid]=dz
+        z["reverse_exit_ab"]=rz
         summary["variants"][symbol]=z
     except Exception as e:
         summary["variants"][symbol]={"error":repr(e)}
