@@ -24,6 +24,9 @@ jobs:
 
       - name: TickScalper Raw Tick A0-B3
         if: github.ref == 'refs/heads/feature/tickscalper-rawtick-v1-20260927'
+        env:
+          RAW_START: '2026-09-25'
+          RAW_END: '2026-09-25'
         run: python3 -u scripts/tickscalper_rawtick_ab.py
 
       - name: Upload TickScalper Raw Tick result
