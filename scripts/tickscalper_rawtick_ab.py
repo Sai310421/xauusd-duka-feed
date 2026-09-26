@@ -394,7 +394,7 @@ def run_direction_state_machine(ticks, mode="HYBRID", follow_min_ms=250, follow_
                    "reverse_rejects":reverse_rej,"expired_events":expired}
 
 
-def run_strict_execution(ticks, mode="MARKET", pullback=0.0, entry_spread_cap=MAX_SPREAD, pending_ms=5000):
+def run_strict_execution(ticks, mode="MARKET", pullback=0.0, entry_spread_cap=MAX_SPREAD, pending_ms=5000, max_hold_ms=2000):
     """Freeze D_F_STRICT direction/timing and vary execution only.
     Signal confirmation is identical to D_F_STRICT:
     250-1000 ms, same-direction momentum >= seed, >=3 consecutive ticks.
@@ -413,7 +413,7 @@ def run_strict_execution(ticks, mode="MARKET", pullback=0.0, entry_spread_cap=MA
         else:
             entry=bid; sl=entry+SL; tp=entry-TP
         return {"t":t,"dir":direction,"entry":entry,"entry_mid":(ask+bid)/2,
-                "sl":sl,"tp":tp,"spread":ask-bid,"max_hold":2000}
+                "sl":sl,"tp":tp,"spread":ask-bid,"max_hold":max_hold_ms}
 
     for t,ask,bid,av,bv in ticks:
         buf.push(bid)
@@ -623,18 +623,22 @@ for v,mode,fmin,fmax,ratio,consec_n in dconfigs:
 
 # Execution-only A/B with D_F_STRICT frozen.
 exec_configs=[
-    # id, mode, pullback, spread_cap, pending_ms
-    ("E_MKT","MARKET",0.00,0.40,0),
-    ("E_S25","MARKET",0.00,0.25,0),
-    ("E_P10","PULLBACK",0.10,0.40,5000),
-    ("E_P20","PULLBACK",0.20,0.40,5000),
-    ("E_P10S25","PULLBACK",0.10,0.25,5000),
+    # id, mode, pullback, spread_cap, pending_ms, max_hold_ms
+    ("E_MKT","MARKET",0.00,0.40,0,2000),
+    ("E_H5","MARKET",0.00,0.40,0,5000),
+    ("E_H10","MARKET",0.00,0.40,0,10000),
+    ("E_H20","MARKET",0.00,0.40,0,20000),
+    ("E_S25","MARKET",0.00,0.25,0,2000),
+    ("E_P10","PULLBACK",0.10,0.40,5000,2000),
+    ("E_P20","PULLBACK",0.20,0.40,5000,2000),
+    ("E_P10S25","PULLBACK",0.10,0.25,5000,2000),
 ]
-for v,mode,pb,scap,pms in exec_configs:
+for v,mode,pb,scap,pms,hms in exec_configs:
     tr,rej=run_strict_execution(ticks,mode=mode,pullback=pb,
-                                entry_spread_cap=scap,pending_ms=pms)
+                                entry_spread_cap=scap,pending_ms=pms,max_hold_ms=hms)
     summary["variants"][v]={"execution_mode":mode,"pullback":pb,
                             "entry_spread_cap":scap,"pending_ms":pms,
+                            "max_hold_ms":hms,
                             "metrics":metrics(tr,active_days),"rejects":rej}
     fields=["entry_t","exit_t","dir","entry","exit","pnl","gross_pnl","cost_drag",
             "hold_ms","reason","spread_entry","exec_mode"]
