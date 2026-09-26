@@ -27,6 +27,8 @@ SCALE = 1000.0
 POINT = 0.001
 START = dt.date.fromisoformat(os.environ.get("RAW_START","2026-09-21"))
 END   = dt.date.fromisoformat(os.environ.get("RAW_END","2026-09-25"))
+HOUR_START = int(os.environ.get("RAW_HOUR_START","0"))
+HOUR_END = int(os.environ.get("RAW_HOUR_END","24"))
 
 # Upstream HFT defaults
 BUFFER_N = 30
@@ -91,7 +93,7 @@ def load_ticks():
     while d<=END:
         if d.weekday()<5:
             days.append(d)
-            for h in range(24):
+            for h in range(HOUR_START,HOUR_END):
                 jobs.append((d,h))
         d += dt.timedelta(days=1)
     hourly={str(d):0 for d in days}
