@@ -38,7 +38,7 @@ CONSEC_MIN = 3
 WMOM_THR = 0.02
 FAST_MA_N = 5
 SLOW_MA_N = 20
-MAX_SPREAD = 40 * POINT
+MAX_SPREAD = float(os.environ.get("RAW_MAX_SPREAD","0.40"))
 MIN_BETWEEN_MS = 500
 MAX_HOLD_MS = 900
 EARLY_PROFIT_MS = 100
@@ -292,8 +292,18 @@ if not ticks:
     raise SystemExit("NO RAW TICKS DOWNLOADED")
 atrmap=minute_atr_map(ticks)
 active_days=sum(1 for n in hourly.values() if n>0)
+spreads_all=sorted(a-b for _,a,b,_,_ in ticks)
+def qtile(x,q):
+    if not x:return 0.0
+    i=min(len(x)-1,max(0,int((len(x)-1)*q)))
+    return x[i]
 summary={"period":{"start":str(START),"end":str(END),"active_days":active_days},
          "ticks":len(ticks),"hourly_counts":hourly,"scale":SCALE,"point":POINT,
+         "max_spread_abs":MAX_SPREAD,
+         "spread_quantiles":{"p10":qtile(spreads_all,.10),"p25":qtile(spreads_all,.25),
+                             "p50":qtile(spreads_all,.50),"p75":qtile(spreads_all,.75),
+                             "p90":qtile(spreads_all,.90),"p95":qtile(spreads_all,.95),
+                             "p99":qtile(spreads_all,.99)},
          "raw_bid_ask":True,"variants":{}}
 for v in ("A0","B1","B2","B3"):
     tr,rej=run_variant(ticks,atrmap,v)
