@@ -10,6 +10,7 @@ on:
     paths:
       - ".github/workflows/duka-sync.yml"
       - "scripts/duka_sync.py"
+      - "scripts/tickscalper_rawtick_ab.py"
 
 permissions:
   contents: write
@@ -20,7 +21,22 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+
+      - name: TickScalper Raw Tick A0-B3
+        if: github.ref == 'refs/heads/feature/tickscalper-rawtick-v1-20260927'
+        run: python3 -u scripts/tickscalper_rawtick_ab.py
+
+      - name: Upload TickScalper Raw Tick result
+        if: github.ref == 'refs/heads/feature/tickscalper-rawtick-v1-20260927'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tickscalper-rawtick-v1
+          path: results/tickscalper-rawtick-v1/
+          if-no-files-found: error
+          retention-days: 30
+
       - uses: actions/cache@v4
+        if: github.ref == 'refs/heads/main'
         with:
           path: |
             nautilus/cache/duka
@@ -28,9 +44,13 @@ jobs:
           key: duka-${{ github.run_id }}
           restore-keys: |
             duka-
+
       - name: Fill next M1 gaps
+        if: github.ref == 'refs/heads/main'
         run: python3 -u scripts/duka_sync.py
+
       - name: Commit books if coverage moved
+        if: github.ref == 'refs/heads/main'
         run: |
           git config user.name "duka-sync"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
