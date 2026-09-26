@@ -1,0 +1,35 @@
+name: Exness Profitability Grid
+
+on:
+  push:
+    branches: [feature/tickscalper-rawtick-v1-20260927]
+    paths:
+      - "scripts/exness_profitability_grid.py"
+      - ".github/workflows/exness-profitability-grid.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  grid:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore Exness tick cache
+        uses: actions/cache@v4
+        with:
+          path: nautilus/cache/exness-ticks
+          key: exness-xauusd-2026-09-v1
+          restore-keys: |
+            exness-xauusd-
+      - name: Run profitability grid
+        run: python3 -u scripts/exness_profitability_grid.py
+      - name: Upload profitability grid
+        uses: actions/upload-artifact@v4
+        with:
+          name: exness-profitability-grid
+          path: results/exness-profitability-grid/
+          if-no-files-found: error
+          retention-days: 30
