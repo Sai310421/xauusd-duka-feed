@@ -1,0 +1,25 @@
+name: AMOS Positive EDGE Factory v2
+on:
+  push:
+    branches: [feature/tickscalper-rawtick-v1-20260927]
+    paths:
+      - 'scripts/amos_positive_edge_factory_v2.py'
+      - '.github/workflows/amos-positive-edge-factory-v2.yml'
+  workflow_dispatch:
+jobs:
+  bt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: nautilus/cache/exness-ticks
+          key: exness-zero-2026-09-v1
+      - name: Run Positive EDGE Factory
+        run: python3 -u scripts/amos_positive_edge_factory_v2.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: amos-positive-edge-factory-v2
+          path: results/amos-multi-edge-portfolio-v1/
+          retention-days: 30
