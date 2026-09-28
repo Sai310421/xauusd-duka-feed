@@ -4,9 +4,9 @@ import json
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1];OUT=ROOT/'results'/'amos-3edge-portfolio-v5';OUT.mkdir(parents=True,exist_ok=True)
 # Isolated namespaces avoid executing result loops and preserve each engine's globals.
-n4={};src3=(ROOT/'scripts'/'amos_multisymbol_edge_factory_v3.py').read_text();exec(src3.split("res={'note'")[0],n4)
+n4={'__file__':str(ROOT/'scripts'/'amos_multisymbol_edge_factory_v3.py')};src3=(ROOT/'scripts'/'amos_multisymbol_edge_factory_v3.py').read_text();exec(src3.split("res={'note'")[0],n4)
 src4=(ROOT/'scripts'/'amos_diverse_edge_factory_v4.py').read_text();tail4=src4.split("def rsi(xs,n=7):",1)[1].split("res={'note'",1)[0];exec("def rsi(xs,n=7):"+tail4,n4)
-n2={};src2=(ROOT/'scripts'/'amos_multi_edge_portfolio_v1.py').read_text();exec(src2.split("res={'design'")[0],n2)
+n2={'__file__':str(ROOT/'scripts'/'amos_multi_edge_portfolio_v1.py')};src2=(ROOT/'scripts'/'amos_multi_edge_portfolio_v1.py').read_text();exec(src2.split("res={'design'")[0],n2)
 PER=n4['PERIODS']; RISK_PCTS=(0.10,0.25,0.50,1.00); INITIAL=1000.0
 def metrics(rows,risk_pct,gov=False):
  ev=sorted(rows,key=lambda x:x['exit_t']);eq=INITIAL;peak=INITIAL;maxdd=0.;wins=loss=0.;gp=gl=0.;st=mx=0;scaled=0
