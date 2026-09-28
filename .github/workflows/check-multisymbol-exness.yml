@@ -1,0 +1,12 @@
+name: Check MultiSymbol Exness
+on:
+  push:
+    branches: [feature/tickscalper-rawtick-v1-20260927]
+    paths: ['scripts/check_multisymbol_exness.py','.github/workflows/check-multisymbol-exness.yml']
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/check_multisymbol_exness.py
