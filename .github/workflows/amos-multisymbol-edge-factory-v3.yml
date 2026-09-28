@@ -1,0 +1,22 @@
+name: AMOS MultiSymbol EDGE Factory v3
+on:
+  push:
+    branches: [feature/tickscalper-rawtick-v1-20260927]
+    paths: ['scripts/amos_multisymbol_edge_factory_v3.py','.github/workflows/amos-multisymbol-edge-factory-v3.yml']
+  workflow_dispatch:
+jobs:
+  bt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: nautilus/cache/exness-multisymbol
+          key: exness-multisymbol-zero-2026-09-v1
+      - run: python3 -u scripts/amos_multisymbol_edge_factory_v3.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: amos-multisymbol-edge-factory-v3
+          path: results/amos-multisymbol-edge-factory-v3/
+          retention-days: 30
