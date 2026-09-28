@@ -63,3 +63,5 @@ for sym in SYMS:
    if a['N']>=10 and b['N']>=10 and a['PF']>=1.2 and b['PF']>=1.2:passed.append({'lane':k,'OOS2':a,'OOS1':b,'DISC':c,'forward_pass':c['N']>=10 and c['PF']>=1.0})
 res['passed_oos']=passed
 OUT2=ROOT/'results'/'amos-diverse-edge-factory-v4';OUT2.mkdir(parents=True,exist_ok=True);(OUT2/'summary.json').write_text(json.dumps(res,indent=2));print(json.dumps(res,indent=2))
+
+# trigger v4 factory
