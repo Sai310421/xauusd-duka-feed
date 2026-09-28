@@ -1,0 +1,25 @@
+name: AMOS Multi Edge Portfolio v1
+on:
+  push:
+    branches: [feature/tickscalper-rawtick-v1-20260927]
+    paths:
+      - 'scripts/amos_multi_edge_portfolio_v1.py'
+      - '.github/workflows/amos-multi-edge-portfolio-v1.yml'
+  workflow_dispatch:
+jobs:
+  bt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: nautilus/cache/exness-ticks
+          key: exness-zero-2026-09-v1
+      - name: Run multi-edge portfolio Raw Tick BT
+        run: python3 -u scripts/amos_multi_edge_portfolio_v1.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: amos-multi-edge-portfolio-v1
+          path: results/amos-multi-edge-portfolio-v1/
+          retention-days: 30
