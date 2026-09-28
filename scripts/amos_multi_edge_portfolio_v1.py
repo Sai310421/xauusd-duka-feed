@@ -28,9 +28,9 @@ def bars(ticks,mins):
  d={}; step=mins*60000
  for t,a,b in ticks:
   k=t//step*step; m=(a+b)/2
-  if k not in d:d[k]=[k,m,m,m,m,a-b]
+  if k not in d:d[k]=[k,m,m,m,m,a-b,a,b,b,b,a,a]
   else:
-   x=d[k]; x[2]=max(x[2],m);x[3]=min(x[3],m);x[4]=m;x[5]=(x[5]+(a-b))/2
+   x=d[k];x[2]=max(x[2],m);x[3]=min(x[3],m);x[4]=m;x[5]=(x[5]+(a-b))/2;x[6]=a;x[7]=b;x[8]=max(x[8],b);x[9]=min(x[9],b);x[10]=max(x[10],a);x[11]=min(x[11],a)
  return [d[k] for k in sorted(d)]
 def ema(xs,n):
  a=2/(n+1); out=[]; v=None
