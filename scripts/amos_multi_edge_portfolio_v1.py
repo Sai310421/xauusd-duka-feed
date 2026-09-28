@@ -47,14 +47,15 @@ def metric(rows,comm=COMM):
 def exit_bar(bs,i,d,e,tp,sl,maxbars):
  end=min(len(bs),i+1+maxbars)
  for j in range(i+1,end):
-  h,l=bs[j][2],bs[j][3]
   if d>0:
-   if l<=sl:return j,sl-e,'SL'
-   if h>=tp:return j,tp-e,'TP'
+   lo,hi=bs[j][9],bs[j][8]
+   if lo<=sl:return j,sl-e,'SL'
+   if hi>=tp:return j,tp-e,'TP'
   else:
-   if h>=sl:return j,e-sl,'SL'
-   if l<=tp:return j,e-tp,'TP'
- j=end-1;return j,(bs[j][4]-e)*d,'TIME'
+   hi,lo=bs[j][10],bs[j][11]
+   if hi>=sl:return j,e-sl,'SL'
+   if lo<=tp:return j,e-tp,'TP'
+ j=end-1;px=bs[j][7] if d>0 else bs[j][6];return j,(px-e)*d,'TIME'
 def edge_trend(ticks,tf=5):
  bs=bars(ticks,tf);c=[x[4] for x in bs];e20=ema(c,20);e60=ema(c,60);at=atr(bs);rows=[];busy=-1
  for i in range(61,len(bs)-1):
@@ -63,7 +64,7 @@ def edge_trend(ticks,tf=5):
   if not d:continue
   if d>0 and not(bs[i-1][3]<=e20[i-1] and c[i]>e20[i] and c[i]>c[i-1]):continue
   if d<0 and not(bs[i-1][2]>=e20[i-1] and c[i]<e20[i] and c[i]<c[i-1]):continue
-  e=c[i];sl=e-d*1.1*at[i];tp=e+d*2.0*at[i];j,p,r=exit_bar(bs,i,d,e,tp,sl,12);busy=j;rows.append({'edge':f'TREND_M{tf}','entry_t':bs[i][0],'exit_t':bs[j][0],'pnl':p,'reason':r})
+  e=bs[i][6] if d>0 else bs[i][7];sl=e-d*1.1*at[i];tp=e+d*2.0*at[i];j,p,r=exit_bar(bs,i,d,e,tp,sl,12);busy=j;rows.append({'edge':f'TREND_M{tf}','entry_t':bs[i][0],'exit_t':bs[j][0],'pnl':p,'reason':r})
  return rows
 def edge_range(ticks,tf=5):
  bs=bars(ticks,tf);c=[x[4] for x in bs];e20=ema(c,20);e60=ema(c,60);at=atr(bs);rows=[];busy=-1
@@ -80,7 +81,7 @@ def edge_breakout(ticks,tf=5):
   prev=[x[2]-x[3] for x in bs[i-20:i]];med=statistics.median(prev);hi=max(x[2] for x in bs[i-20:i]);lo=min(x[3] for x in bs[i-20:i]);rng=bs[i][2]-bs[i][3]
   d=1 if c[i]>hi and rng>1.4*med else (-1 if c[i]<lo and rng>1.4*med else 0)
   if not d:continue
-  e=c[i];sl=e-d*at[i];tp=e+d*2.2*at[i];j,p,r=exit_bar(bs,i,d,e,tp,sl,10);busy=j;rows.append({'edge':f'BREAKOUT_M{tf}','entry_t':bs[i][0],'exit_t':bs[j][0],'pnl':p,'reason':r})
+  e=bs[i][6] if d>0 else bs[i][7];sl=e-d*at[i];tp=e+d*2.2*at[i];j,p,r=exit_bar(bs,i,d,e,tp,sl,10);busy=j;rows.append({'edge':f'BREAKOUT_M{tf}','entry_t':bs[i][0],'exit_t':bs[j][0],'pnl':p,'reason':r})
  return rows
 class B:
  def __init__(self):self.q=deque(maxlen=60)
@@ -115,7 +116,7 @@ def edge_tickreverse(ticks):
   if len(mids)>=20:
    xs=list(mids)[-20:];ret=sum(abs(xs[i]-xs[i-1]) for i in range(1,len(xs)))/19
   if pos:
-   d=pos['d'];px=bd if d>0 else a;pp=(px-pos['e'])*d;hit=('SL',-.60) if pp<=-.60 else (('TP',.60) if pp>=.60 else None)
+   d=pos['d'];px=bd if d>0 else a;pp=(px-pos['e'])*d;hit=('SL',pp) if pp<=-.60 else (('TP',pp) if pp>=.60 else None)
    if prev is not None:
     de=(px-prev)*d
     if de<0:adv+=1
@@ -148,13 +149,16 @@ def overlap(a,b):
   ints=[(r['entry_t'],r['exit_t']) for r in y];return sum(any(s<=r['entry_t']<=e for s,e in ints) for r in x)/len(x)
  return (one(a,b)+one(b,a))/2
 def portfolio(edges,governor=False):
- ev=sorted([r for rs in edges.values() for r in rs],key=lambda r:r['exit_t']);eq=peak=0.;accepted=[];blocked=0;hist={k:deque(maxlen=20) for k in edges}
+ ev=sorted([r for rs in edges.values() for r in rs],key=lambda r:r['exit_t']);eq=peak=0.;pn=[];scaled=0
  for r in ev:
-  dd=(peak-eq)/INITIAL;h=hist[r['edge']];roll=sum(h)/len(h) if h else 0;allow=not(governor and (dd>=.035 or (dd>=.015 and len(h)>=8 and roll<=0)))
-  if allow:
-   x=r['pnl']-COMM;accepted.append({'pnl':r['pnl']});eq+=x;peak=max(peak,eq);h.append(x)
-  else:blocked+=1
- m=metric(accepted);m['blocked']=blocked;return m
+  dd=(peak-eq)/INITIAL;mult=1.0
+  if governor:
+   if dd>=.035:mult=.10
+   elif dd>=.025:mult=.25
+   elif dd>=.015:mult=.50
+  if mult<1:scaled+=1
+  x=(r['pnl']-COMM)*mult;pn.append({'pnl':x+COMM});eq+=x;peak=max(peak,eq)
+ m=metric(pn,COMM);m['scaled_trades']=scaled;return m
 res={'design':'Multi-edge candidate portfolio v1. Only TICKREV_OPP3 is previously frozen positive; other lanes must pass OOS independently.','commission_per_trade':COMM,'initial_equity':INITIAL,'periods':{}}
 for p,(s,e) in PERIODS.items():
  ticks=load(s,e);ed={'TICKREV_OPP3':edge_tickreverse(ticks),'TREND_M5':edge_trend(ticks),'RANGE_M5':edge_range(ticks),'BREAKOUT_M5':edge_breakout(ticks)}
