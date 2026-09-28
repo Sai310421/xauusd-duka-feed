@@ -71,7 +71,7 @@ def edge_range(ticks,tf=5):
   if i<=busy or at[i]<=0 or abs(e20[i]-e60[i])/at[i]>.65:continue
   hi=max(x[2] for x in bs[i-20:i]);lo=min(x[3] for x in bs[i-20:i]);d=1 if bs[i][3]<lo and c[i]>lo else (-1 if bs[i][2]>hi and c[i]<hi else 0)
   if not d:continue
-  e=c[i];sl=e-d*.9*at[i];tp=e+d*1.35*at[i];j,p,r=exit_bar(bs,i,d,e,tp,sl,8);busy=j;rows.append({'edge':f'RANGE_M{tf}','entry_t':bs[i][0],'exit_t':bs[j][0],'pnl':p,'reason':r})
+  e=bs[i][6] if d>0 else bs[i][7];sl=e-d*.9*at[i];tp=e+d*1.35*at[i];j,p,r=exit_bar(bs,i,d,e,tp,sl,8);busy=j;rows.append({'edge':f'RANGE_M{tf}','entry_t':bs[i][0],'exit_t':bs[j][0],'pnl':p,'reason':r})
  return rows
 def edge_breakout(ticks,tf=5):
  bs=bars(ticks,tf);c=[x[4] for x in bs];at=atr(bs);rows=[];busy=-1
