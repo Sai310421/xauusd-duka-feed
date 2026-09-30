@@ -1,0 +1,24 @@
+name: Export XAU MTF Data v2
+on:
+  push:
+    branches: ["amos/ml66-long-oos-v1"]
+    paths:
+      - ".github/workflows/export-xau-mtf-data-v2.yml"
+  workflow_dispatch:
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: amos/ml66-long-oos-v1
+      - name: Verify
+        run: |
+          ls -lh books/xauusd_mtf.json scripts/ml66_long_oos_fast_v2.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xauusd-mtf-long-data-v2
+          path: |
+            books/xauusd_mtf.json
+            scripts/ml66_long_oos_fast_v2.py
+          retention-days: 7
