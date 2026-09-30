@@ -1,0 +1,27 @@
+name: Export XAU MTF Data
+on:
+  push:
+    branches: ["amos/ml66-long-oos-v1"]
+    paths:
+      - ".github/workflows/export-xau-mtf-data.yml"
+  workflow_dispatch:
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: amos/ml66-long-oos-v1
+      - name: Verify
+        run: |
+          ls -lh books/xauusd_mtf.json
+          python - <<'PY'
+          import json
+          p=json.load(open('books/xauusd_mtf.json'))
+          print(len(p.get('tfs',{}).get('M5',[])))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xauusd-mtf-long-data
+          path: books/xauusd_mtf.json
+          retention-days: 7
