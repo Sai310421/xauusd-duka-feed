@@ -1,0 +1,39 @@
+name: ML66 Long OOS Fast v2
+on:
+  push:
+    branches: ["amos/ml66-long-oos-v1"]
+    paths:
+      - "scripts/ml66_long_oos_fast_v2.py"
+      - ".github/workflows/ml66-long-oos-fast-v2.yml"
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  long-oos-fast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: amos/ml66-long-oos-v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: |
+          python -m pip install --upgrade pip
+          pip install numpy pandas lightgbm scikit-learn joblib
+      - name: Run fast long OOS
+        run: python scripts/ml66_long_oos_fast_v2.py
+      - name: Show report
+        run: cat bt_results/ml66_long_oos_fast_v2/report.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ml66-long-oos-fast-v2
+          path: bt_results/ml66_long_oos_fast_v2/
+          retention-days: 30
+      - name: Commit report
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f bt_results/ml66_long_oos_fast_v2/report.json
+          if ! git diff --cached --quiet; then git commit -m "Add ML66 fast long OOS results"; git push; fi
