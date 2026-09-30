@@ -236,8 +236,20 @@ raw=load(); X,base=build66(raw); n=min(len(X),len(raw)); X=X[-n:]; raw=raw.iloc[
 configs=[(48,40)]
 results=[]
 for h,k in configs:
-    m,logs=walk_forward(X,raw,h,k)
-    results.append({"horizon":h,"features":k,"oos_walkforward":m,"chunks":logs})
+    m,logs,trades=walk_forward(X,raw,h,k)
+    cutoff180=raw.DateTime.max()-pd.Timedelta(days=180)
+    t180=[x for x in trades if raw.DateTime.iloc[x[0]]>=cutoff180]
+    m180=metrics(t180)
+    oos_start_idx=int(n*.20)
+    results.append({
+      "horizon":h,"features":k,
+      "oos_start":str(raw.DateTime.iloc[oos_start_idx]),
+      "oos_end":str(raw.DateTime.iloc[-1]),
+      "oos_walkforward":m,
+      "last_180d_start":str(cutoff180),
+      "last_180d":m180,
+      "chunks":logs
+    })
 selected=max(results,key=lambda q:(q["oos_walkforward"]["PF"],q["oos_walkforward"]["sum_R"],-q["oos_walkforward"]["maxDD_R"]))
 report={"status":"OOS_RESEARCH_ONLY_NOT_LIVE_APPROVED","target_pf":1.20,
  "method":"strict causal walk-forward + direction gate; BUY/SELL enabled for next chunk only when prior validation side PF>=1.20 with >=12 trades",
