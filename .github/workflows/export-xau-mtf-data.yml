@@ -23,5 +23,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: xauusd-mtf-long-data
-          path: books/xauusd_mtf.json
+          path: |\n            books/xauusd_mtf.json\n            scripts/ml66_long_oos_fast_v2.py
           retention-days: 7
