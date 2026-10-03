@@ -1,0 +1,20 @@
+name: duka-raw90
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "40 21 * * *"
+
+jobs:
+  sync:
+    runs-on: self-hosted
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Maintain rolling 90-day raw tick cache
+        env:
+          DUKA_RAW_ROOT: ${{ vars.DUKA_RAW_ROOT }}
+        run: python -u scripts/duka_raw90.py --days 90
