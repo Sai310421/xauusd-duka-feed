@@ -18,3 +18,7 @@ jobs:
         env:
           DUKA_RAW_ROOT: ${{ vars.DUKA_RAW_ROOT }}
         run: python -u scripts/duka_raw90.py --days 90
+      - name: Audit raw tick integrity
+        env:
+          DUKA_RAW_ROOT: ${{ vars.DUKA_RAW_ROOT }}
+        run: python -u scripts/raw90_integrity.py
