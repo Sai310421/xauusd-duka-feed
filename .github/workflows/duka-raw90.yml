@@ -17,6 +17,7 @@ jobs:
       - name: Maintain rolling 90-day raw tick cache
         env:
           DUKA_RAW_ROOT: ${{ vars.DUKA_RAW_ROOT }}
+          DUKA_SYMBOLS: XAUUSD,EURUSD,GBPUSD,USDJPY,XAGUSD
         run: python -u scripts/duka_raw90.py --days 90
       - name: Audit raw tick integrity
         env:
