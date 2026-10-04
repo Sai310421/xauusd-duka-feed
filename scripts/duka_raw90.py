@@ -35,7 +35,7 @@ def day(day:dt.date,out:Path,symbol:str)->dict:
     return {"day":str(day),"hit":False,"ticks":n,"bytes":target.stat().st_size,"sha256":h,"path":str(target)}
 
 def main():
-    ap=argparse.ArgumentParser();ap.add_argument("--days",type=int,default=90);ap.add_argument("--root",default=os.environ.get("DUKA_RAW_ROOT","nautilus/cache/raw"));ap.add_argument("--symbols",default=os.environ.get("DUKA_SYMBOLS","XAUUSD,EURUSD,GBPUSD,USDJPY,XAGUSD"));a=ap.parse_args()
+    ap=argparse.ArgumentParser();ap.add_argument("--days",type=int,default=90);ap.add_argument("--root",default=os.environ.get("DUKA_RAW_ROOT") or str(Path.home()/".research-line"/"raw"));ap.add_argument("--symbols",default=os.environ.get("DUKA_SYMBOLS","XAUUSD,EURUSD,GBPUSD,USDJPY,XAGUSD"));a=ap.parse_args()
     root=Path(a.root); today=dt.datetime.now(dt.timezone.utc).date(); summary={}
     for symbol in [x.strip().upper() for x in a.symbols.split(",") if x.strip()]:
         if symbol not in SCALES: raise ValueError(f"unsupported symbol: {symbol}")
