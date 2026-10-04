@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv,datetime as dt,json,os
 from pathlib import Path
 
-ROOT=Path(os.environ.get("DUKA_RAW_ROOT","nautilus/cache/raw"))
+ROOT=Path(os.environ.get("DUKA_RAW_ROOT") or str(Path.home()/".research-line"/"raw"))
 SYMBOLS=[x.strip().upper() for x in os.environ.get("DUKA_SYMBOLS","XAUUSD,EURUSD,GBPUSD,USDJPY,XAGUSD").split(",") if x.strip()]
 MIN_TICKS=int(os.environ.get("RAW_MIN_TICKS_PER_DAY","100"))
 MAX_BAD_SPREAD_RATIO=float(os.environ.get("RAW_MAX_BAD_SPREAD_RATIO","0.0001"))
