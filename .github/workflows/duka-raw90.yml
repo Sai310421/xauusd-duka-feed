@@ -29,14 +29,22 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .duka_raw
-          key: duka-xauusd-raw-v1-${{ github.run_number }}
+          key: duka-xauusd-raw-v2-${{ github.run_number }}
           restore-keys: |
+            duka-xauusd-raw-v2-
             duka-xauusd-raw-v1-
+          save-always: true
 
-      - name: Maintain rolling 90-day raw tick cache
-        run: python -u scripts/duka_raw90.py --days 90
+      - name: First pass raw90 download
+        run: python -u scripts/duka_raw90.py --days 90 --workers 8
 
-      - name: Audit raw tick integrity
+      - name: Repair missing weekdays pass 1
+        run: python -u scripts/duka_raw90.py --days 90 --workers 4
+
+      - name: Repair missing weekdays pass 2
+        run: python -u scripts/duka_raw90.py --days 90 --workers 2
+
+      - name: Final raw tick integrity gate
         run: python -u scripts/raw90_integrity.py
 
       - name: Checkout AMOS TripleEngine
