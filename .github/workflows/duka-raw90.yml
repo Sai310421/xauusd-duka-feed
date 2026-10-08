@@ -2,6 +2,10 @@ name: duka-raw90
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/duka-raw90.yml"
+      - "scripts/**"
   schedule:
     - cron: "40 21 * * *"
 
