@@ -11,8 +11,12 @@ on:
 
 jobs:
   sync:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     timeout-minutes: 240
+    env:
+      DUKA_RAW_ROOT: ${{ github.workspace }}/.duka_raw
+      DUKA_SYMBOLS: XAUUSD
+
     steps:
       - name: Checkout raw feed
         uses: actions/checkout@v4
@@ -21,16 +25,18 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Restore rolling raw-tick cache
+        uses: actions/cache@v4
+        with:
+          path: .duka_raw
+          key: duka-xauusd-raw-v1-${{ github.run_number }}
+          restore-keys: |
+            duka-xauusd-raw-v1-
+
       - name: Maintain rolling 90-day raw tick cache
-        env:
-          DUKA_RAW_ROOT: ${{ vars.DUKA_RAW_ROOT }}
-          DUKA_SYMBOLS: XAUUSD
         run: python -u scripts/duka_raw90.py --days 90
 
       - name: Audit raw tick integrity
-        env:
-          DUKA_RAW_ROOT: ${{ vars.DUKA_RAW_ROOT }}
-          DUKA_SYMBOLS: XAUUSD
         run: python -u scripts/raw90_integrity.py
 
       - name: Checkout AMOS TripleEngine
@@ -40,14 +46,12 @@ jobs:
           ref: amos-tripleengine-virtualentry-v2
           path: amos-system
 
-      - name: Install NautilusTrader 2.x
+      - name: Install NautilusTrader
         run: |
           python -m pip install --upgrade pip
           python -m pip install --upgrade --pre nautilus_trader
 
       - name: Run Nautilus RAW QuoteTick Virtual Entry baseline
-        env:
-          DUKA_RAW_ROOT: ${{ vars.DUKA_RAW_ROOT }}
         run: |
           python -u amos-system/amos_triple_engine_v2/nautilus_raw90_runner.py             --raw-root "${DUKA_RAW_ROOT}/XAUUSD"             --days 90             --out amos-system/amos_triple_engine_v2/nautilus_raw90_kpi.json
 
