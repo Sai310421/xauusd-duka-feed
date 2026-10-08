@@ -8,18 +8,48 @@ on:
 jobs:
   sync:
     runs-on: self-hosted
-    timeout-minutes: 180
+    timeout-minutes: 240
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout raw feed
+        uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
       - name: Maintain rolling 90-day raw tick cache
         env:
           DUKA_RAW_ROOT: ${{ vars.DUKA_RAW_ROOT }}
-          DUKA_SYMBOLS: XAUUSD,EURUSD,GBPUSD,USDJPY,XAGUSD
+          DUKA_SYMBOLS: XAUUSD
         run: python -u scripts/duka_raw90.py --days 90
+
       - name: Audit raw tick integrity
         env:
           DUKA_RAW_ROOT: ${{ vars.DUKA_RAW_ROOT }}
+          DUKA_SYMBOLS: XAUUSD
         run: python -u scripts/raw90_integrity.py
+
+      - name: Checkout AMOS TripleEngine
+        uses: actions/checkout@v4
+        with:
+          repository: Sai310421/xauusd-data
+          ref: amos-tripleengine-virtualentry-v2
+          path: amos-system
+
+      - name: Install NautilusTrader 2.x
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --upgrade --pre nautilus_trader
+
+      - name: Run Nautilus RAW QuoteTick Virtual Entry baseline
+        env:
+          DUKA_RAW_ROOT: ${{ vars.DUKA_RAW_ROOT }}
+        run: |
+          python -u amos-system/amos_triple_engine_v2/nautilus_raw90_runner.py             --raw-root "${DUKA_RAW_ROOT}/XAUUSD"             --days 90             --out amos-system/amos_triple_engine_v2/nautilus_raw90_kpi.json
+
+      - name: Upload AMOS Nautilus raw90 KPI
+        uses: actions/upload-artifact@v4
+        with:
+          name: amos-tripleengine-nautilus-raw90-kpi
+          path: amos-system/amos_triple_engine_v2/nautilus_raw90_kpi.json
+          if-no-files-found: error
