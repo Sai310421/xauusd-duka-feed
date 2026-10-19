@@ -77,6 +77,24 @@ jobs:
         run: |
           python -u amos-system/amos_triple_engine_v2/nautilus_raw90_runner.py             --raw-root "${DUKA_RAW_ROOT}/XAUUSD"             --days 90             --out amos-system/amos_triple_engine_v2/nautilus_raw90_kpi.json
 
+      - name: Normalize Nautilus EDGE evidence (fail closed)
+        if: always()
+        run: |
+          mkdir -p artifacts/edge
+          if test -f amos-system/amos_triple_engine_v2/nautilus_raw90_kpi.json; then
+            python scripts/edge_result_gate.py --input amos-system/amos_triple_engine_v2/nautilus_raw90_kpi.json --output artifacts/edge/nautilus_raw90_evidence.json
+          else
+            printf '%s\n' '{"status":"INCOMPLETE","reason":"NAUTILUS_KPI_MISSING","eligible_for_promotion":false}' > artifacts/edge/nautilus_raw90_evidence.json
+          fi
+
+      - name: Upload standardized EDGE evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: amos-edge-evidence
+          path: artifacts/edge/nautilus_raw90_evidence.json
+          if-no-files-found: error
+
       - name: Upload AMOS Nautilus raw90 KPI
         uses: actions/upload-artifact@v4
         with:
