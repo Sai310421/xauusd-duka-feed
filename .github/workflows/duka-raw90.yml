@@ -44,8 +44,22 @@ jobs:
       - name: Repair missing weekdays pass 2
         run: python -u scripts/duka_raw90.py --days 90 --workers 2
 
+      - name: Retry missing or invalid partitions only
+        run: python -u scripts/repair_raw90_missing.py --days 90 --attempts 3 --delay 15
+
       - name: Final raw tick integrity gate
         run: python -u scripts/raw90_integrity.py
+
+      - name: Upload raw90 integrity and repair diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: duka-raw90-diagnostics
+          path: |
+            .duka_raw/*/download-manifest.json
+            .duka_raw/*/repair-report.json
+            .duka_raw/*/integrity.json
+          if-no-files-found: warn
 
       - name: Checkout AMOS TripleEngine
         uses: actions/checkout@v4
