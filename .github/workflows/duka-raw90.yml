@@ -44,8 +44,22 @@ jobs:
       - name: Repair missing weekdays pass 2
         run: python -u scripts/duka_raw90.py --days 90 --workers 2
 
+      - name: Retry missing or invalid partitions only
+        run: python -u scripts/repair_raw90_missing.py --days 90 --attempts 3 --delay 15
+
       - name: Final raw tick integrity gate
         run: python -u scripts/raw90_integrity.py
+
+      - name: Upload raw90 integrity and repair diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: duka-raw90-diagnostics
+          path: |
+            .duka_raw/*/download-manifest.json
+            .duka_raw/*/repair-report.json
+            .duka_raw/*/integrity.json
+          if-no-files-found: warn
 
       - name: Checkout AMOS TripleEngine
         uses: actions/checkout@v4
@@ -62,6 +76,24 @@ jobs:
       - name: Run Nautilus RAW QuoteTick Virtual Entry baseline
         run: |
           python -u amos-system/amos_triple_engine_v2/nautilus_raw90_runner.py             --raw-root "${DUKA_RAW_ROOT}/XAUUSD"             --days 90             --out amos-system/amos_triple_engine_v2/nautilus_raw90_kpi.json
+
+      - name: Normalize Nautilus EDGE evidence (fail closed)
+        if: always()
+        run: |
+          mkdir -p artifacts/edge
+          if test -f amos-system/amos_triple_engine_v2/nautilus_raw90_kpi.json; then
+            python scripts/edge_result_gate.py --input amos-system/amos_triple_engine_v2/nautilus_raw90_kpi.json --output artifacts/edge/nautilus_raw90_evidence.json
+          else
+            printf '%s\n' '{"status":"INCOMPLETE","reason":"NAUTILUS_KPI_MISSING","eligible_for_promotion":false}' > artifacts/edge/nautilus_raw90_evidence.json
+          fi
+
+      - name: Upload standardized EDGE evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: amos-edge-evidence
+          path: artifacts/edge/nautilus_raw90_evidence.json
+          if-no-files-found: error
 
       - name: Upload AMOS Nautilus raw90 KPI
         uses: actions/upload-artifact@v4
