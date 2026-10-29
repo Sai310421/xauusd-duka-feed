@@ -45,7 +45,19 @@ jobs:
         run: python -u scripts/duka_raw90.py --days 90 --workers 2
 
       - name: Final raw tick integrity gate
+        id: integrity
         run: python -u scripts/raw90_integrity.py
+
+      - name: Preserve missing-day and integrity evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xauusd-raw90-integrity-${{ github.run_id }}
+          path: |
+            .duka_raw/XAUUSD/integrity.json
+            .duka_raw/XAUUSD/download-manifest.json
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Checkout AMOS TripleEngine
         uses: actions/checkout@v4
