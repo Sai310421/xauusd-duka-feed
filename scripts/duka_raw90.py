@@ -50,6 +50,7 @@ def day(day:dt.date,out:Path,symbol:str)->dict:
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--days",type=int,default=90)
+    ap.add_argument("--sessions",type=int,default=0,help="Number of completed UTC weekdays, excluding today")
     ap.add_argument("--root",default=os.environ.get("DUKA_RAW_ROOT") or str(Path.home()/".research-line"/"raw"))
     ap.add_argument("--symbols",default=os.environ.get("DUKA_SYMBOLS","XAUUSD"))
     ap.add_argument("--workers",type=int,default=int(os.environ.get("DUKA_WORKERS","8")))
@@ -61,7 +62,16 @@ def main():
         if symbol not in SCALES:
             raise ValueError(f"unsupported symbol: {symbol}")
         out=root/symbol
-        days=[today-dt.timedelta(days=i) for i in range(a.days,0,-1)]
+        if a.sessions:
+            if a.sessions < 1 or a.sessions > 1000:
+                raise ValueError("--sessions must be 1..1000")
+            days=[]; offset=1
+            while len(days)<a.sessions:
+                d=today-dt.timedelta(days=offset)
+                if d.weekday()<5: days.append(d)
+            days.sort()
+        else:
+            days=[today-dt.timedelta(days=i) for i in range(a.days,0,-1)]
         rows=[]
         with ThreadPoolExecutor(max_workers=max(1,a.workers)) as ex:
             futs={ex.submit(day,d,out,symbol):d for d in days}
@@ -78,7 +88,7 @@ def main():
         summary[symbol]={
             "ready_days":sum(bool(x.get("path")) for x in rows),
             "weekday_targets":sum(1 for d in days if d.weekday()<5),
-            "days":a.days,
+            "days":a.days,"sessions":a.sessions,
             "workers":a.workers,
         }
     print(json.dumps(summary,indent=2))
