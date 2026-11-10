@@ -2,6 +2,12 @@ name: duka-raw90
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/duka-raw90.yml"
+      - "scripts/duka_raw90.py"
+      - "scripts/raw90_integrity.py"
   pull_request:
     paths:
       - ".github/workflows/duka-raw90.yml"
@@ -16,6 +22,7 @@ jobs:
     env:
       DUKA_RAW_ROOT: ${{ github.workspace }}/.duka_raw
       DUKA_SYMBOLS: XAUUSD
+      RAW_TARGET_SESSIONS: "90"
 
     steps:
       - name: Checkout raw feed
@@ -36,13 +43,13 @@ jobs:
           save-always: true
 
       - name: First pass raw90 download
-        run: python -u scripts/duka_raw90.py --days 90 --workers 8
+        run: python -u scripts/duka_raw90.py --sessions 90 --workers 8
 
       - name: Repair missing weekdays pass 1
-        run: python -u scripts/duka_raw90.py --days 90 --workers 4
+        run: python -u scripts/duka_raw90.py --sessions 90 --workers 4
 
       - name: Repair missing weekdays pass 2
-        run: python -u scripts/duka_raw90.py --days 90 --workers 2
+        run: python -u scripts/duka_raw90.py --sessions 90 --workers 2
 
       - name: Final raw tick integrity gate
         id: integrity
@@ -59,25 +66,11 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-      - name: Checkout AMOS TripleEngine
-        uses: actions/checkout@v4
-        with:
-          repository: Sai310421/xauusd-data
-          ref: amos-tripleengine-virtualentry-v2
-          path: amos-system
-
-      - name: Install NautilusTrader
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install --upgrade --pre nautilus_trader
-
-      - name: Run Nautilus RAW QuoteTick Virtual Entry baseline
-        run: |
-          python -u amos-system/amos_triple_engine_v2/nautilus_raw90_runner.py             --raw-root "${DUKA_RAW_ROOT}/XAUUSD"             --days 90             --out amos-system/amos_triple_engine_v2/nautilus_raw90_kpi.json
-
-      - name: Upload AMOS Nautilus raw90 KPI
+      - name: Preserve 90-session raw Bid Ask CSV dataset
         uses: actions/upload-artifact@v4
         with:
-          name: amos-tripleengine-nautilus-raw90-kpi
-          path: amos-system/amos_triple_engine_v2/nautilus_raw90_kpi.json
+          name: xauusd-raw-bid-ask-90sessions-${{ github.run_id }}
+          path: .duka_raw/XAUUSD/*.csv
           if-no-files-found: error
+          compression-level: 6
+          retention-days: 14
