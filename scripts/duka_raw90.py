@@ -68,6 +68,7 @@ def main():
             days=[]; offset=1
             while len(days)<a.sessions:
                 d=today-dt.timedelta(days=offset)
+                offset+=1
                 if d.weekday()<5: days.append(d)
             days.sort()
         else:
