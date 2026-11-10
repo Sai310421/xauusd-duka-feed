@@ -24,7 +24,17 @@ def inspect_day(p:Path)->dict:
 
 def audit(root:Path,days:int=90,symbol:str="XAUUSD")->dict:
     today=dt.datetime.now(dt.timezone.utc).date()
-    wanted=[today-dt.timedelta(days=i) for i in range(days,0,-1)]
+    sessions=int(os.environ.get("RAW_TARGET_SESSIONS","0"))
+    if sessions:
+        if not 1 <= sessions <= 1000: raise ValueError("RAW_TARGET_SESSIONS must be 1..1000")
+        wanted=[]; offset=1
+        while len(wanted)<sessions:
+            d=today-dt.timedelta(days=offset)
+            offset+=1
+            if d.weekday()<5: wanted.append(d)
+        wanted.sort()
+    else:
+        wanted=[today-dt.timedelta(days=i) for i in range(days,0,-1)]
     checks={}; missing=[]
     for d in wanted:
         # Saturday/Sunday are not required cache partitions.
